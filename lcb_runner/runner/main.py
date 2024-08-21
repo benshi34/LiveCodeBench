@@ -19,6 +19,7 @@ def main():
     args = get_args()
 
     model = LanguageModelStore[args.model]
+
     benchmark, format_prompt = build_prompt_benchmark(args)
     if args.debug:
         print(f"Running with {len(benchmark)} instances in debug mode")
@@ -70,6 +71,9 @@ def main():
     combined_results = combine_results(
         args.scenario, results, model, args.cot_code_execution
     )
+
+    with open('combined_results.json', 'w') as f:
+        json.dump(combined_results, f)
 
     save_results = [
         instance.insert_output(outputs_list, extracted_list)

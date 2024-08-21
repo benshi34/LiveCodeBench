@@ -1,4 +1,5 @@
 import json
+from rank_bm25 import BM25Okapi
 
 try:
     from anthropic import HUMAN_PROMPT, AI_PROMPT
@@ -11,7 +12,7 @@ from lcb_runner.benchmarks.code_generation import CodeGenerationProblem
 
 
 class PromptConstants:
-    SYSTEM_MESSAGE_GENERIC = f"You are an expert Python programmer. You will be given a question (problem specification) and will generate a correct Python program that matches the specification and passes all tests. You will NOT return anything except for the program."
+    SYSTEM_MESSAGE_GENERIC = f"You are an expert Python programmer. You will be given a question (problem specification) and will generate a correct Python program that matches the specification and passes all tests."
 
     SYSTEM_MESSAGE_GEMINI = f"You are an expert Python programmer. You will be given a question (problem specification) and will generate a correct Python program that matches the specification and passes all tests. You will NOT return anything except for the program. Do NOT use system calls like `exit` in the generated program."
 
@@ -46,6 +47,93 @@ def get_generic_question_template_answer(question: CodeGenerationProblem):
         prompt += f"### Format: {PromptConstants.FORMATTING_WITHOUT_STARTER_CODE}\n"
         prompt += "```python\n# YOUR CODE HERE\n```\n\n"
     prompt += f"### Answer: (use the provided format with backticks)\n\n"
+    return prompt
+
+def get_cot_question_template_answer(question: CodeGenerationProblem):
+    if question.starter_code:
+        prompt = f"""Please reply with a python solution to the below problem. Make sure to wrap your output code in '```python' and '```' Markdown
+delimiters, and include exactly one block of code with the entire solution. 
+Additionally, it is extremely important you use the starter_code provided, as your answers will be evaluated with the assumption that your output utilizes the starter code.
+You may use the following steps to help you solve the problem. Reason through the problem and:
+1. Restate the problem in plain English
+2. Conceptualize a solution first in plain English
+3. Write a pseudocode solution
+4. Output the final Python solution with your solution steps in comments. (Make sure to wrap this in python delimiters!)
+Make sure to make your reasoning explicitly clear, as people will be reading your solution to aid them in solving other problems.
+No outside libraries are allowed.
+
+[BEGIN PROBLEM]
+{question.question_content}
+[END PROBLEM]
+
+[BEGIN STARTER CODE]
+```python\n{question.starter_code}\n```\n\n
+[END STARTER CODE]
+"""
+    else: 
+        prompt = f"""Please reply with a python solution to the below problem. Make sure to wrap your code in '```python' and '```' Markdown
+delimiters, and include exactly one block of code with the entire solution in the final code step.
+You may use the following steps to help you solve the problem. Reason through the problem and:
+1. Restate the problem in plain English
+2. Conceptualize a solution first in plain English
+3. Write a pseudocode solution
+4. Output the final Python solution with your solution steps in comments. (Make sure to wrap this in python delimiters!)
+Make sure to make your reasoning explicitly clear, as people will be reading your solution to aid them in solving other problems.
+No outside libraries are allowed.
+
+[BEGIN PROBLEM]
+{question.question_content}
+[END PROBLEM]"""
+    return prompt
+
+def get_cot_retrieval_question_template_answer(question: CodeGenerationProblem, retrieval_text: str):
+    if question.starter_code:
+        prompt = f"""Please reply with a python solution to the below problem. Make sure to wrap your output code in '```python' and '```' Markdown
+delimiters, and include exactly one block of code with the entire solution. You will also be given a similar problem + solution that has some degree of commonality with the problem you are currently solving: use it to your advantage.
+Additionally, it is extremely important you use the starter_code provided, as your answers will be evaluated with the assumption that your output utilizes the starter code.
+You may use the following steps to help you solve the problem. Reason through the problem and:
+1. Restate the problem in plain English
+2. Conceptualize a solution first in plain English
+3. Write a pseudocode solution
+4. Output the final Python solution with your solution steps in comments. (Make sure to wrap this in python delimiters!)
+Make sure to make your reasoning explicitly clear, as people will be reading your solution to aid them in solving other problems.
+No outside libraries are allowed.
+
+Here is the similar problem first:
+[BEGIN SIMILAR PROBLEM AND SOLUTION]
+{retrieval_text}
+[END SIMILAR PROBLEM AND SOLUTION]
+
+And here is the problem you are to solve:
+[BEGIN PROBLEM]
+{question.question_content}
+[END PROBLEM]
+
+[BEGIN STARTER CODE]
+```python\n{question.starter_code}\n```\n\n
+[END STARTER CODE]
+"""
+    else: 
+        prompt = f"""Please reply with a python solution to the below problem. Make sure to wrap your code in '```python' and '```' Markdown
+delimiters, and include exactly one block of code with the entire solution in the final code step. You will also be given a similar problem + solution that has some degree of commonality with the problem you are currently solving: use it to your advantage.
+You may use the following steps to help you solve the problem. Reason through the problem and:
+1. Restate the problem in plain English
+2. Conceptualize a solution first in plain English
+3. Write a pseudocode solution
+4. Output the final Python solution with your solution steps in comments. (Make sure to wrap this in python delimiters!)
+Make sure to make your reasoning explicitly clear, as people will be reading your solution to aid them in solving other problems.
+No outside libraries are allowed.
+
+Here is the similar problem first:
+[BEGIN SIMILAR PROBLEM AND SOLUTION]
+{retrieval_text}
+[END SIMILAR PROBLEM AND SOLUTION]
+
+And here is the problem you are to solve:
+[BEGIN PROBLEM]
+{question.question_content}
+[END PROBLEM]
+"""
     return prompt
 
 
@@ -202,6 +290,315 @@ def get_base_model_question_template_answer(question: CodeGenerationProblem):
     )
     return prompt
 
+def format_prompt_generation_cot_retrieval(
+    question: CodeGenerationProblem, LanguageModelStyle: LMStyle, retrieval_base
+) -> str:
+    if LanguageModelStyle in [LMStyle.OpenAIChat, LMStyle.DeepSeekAPI]:
+        chat_messages = [
+            {
+                "role": "system",
+                "content": PromptConstants.SYSTEM_MESSAGE_GENERIC,
+            },
+        ]
+        chat_messages += [
+            {
+                "role": "user",
+                "content": get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]),
+            },
+        ]
+        return chat_messages
+
+    if LanguageModelStyle == LMStyle.LLaMa3:
+        chat_messages = [
+            {
+                "role": "system",
+                "content": PromptConstants.SYSTEM_MESSAGE_GENERIC,
+            },
+        ]
+        chat_messages += [
+            {
+                "role": "user",
+                "content": get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]),
+            },
+        ]
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(
+            "meta-llama/Meta-Llama-3-8B-Instruct", padding_side="left", use_fast=False
+        )
+        return tokenizer.apply_chat_template(
+            chat_messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            truncation=False,
+            padding=False,
+        )
+
+    if LanguageModelStyle == LMStyle.Claude:
+        prompt = f"{HUMAN_PROMPT}\n"
+        prompt += f"{PromptConstants.SYSTEM_MESSAGE_GENERIC}\n\n"
+        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]).rstrip()}\n"
+        prompt += f"{AI_PROMPT}"
+        return prompt
+
+    if LanguageModelStyle == LMStyle.Claude3:
+        system = PromptConstants.SYSTEM_MESSAGE_GENERIC
+        prompt = [
+            {
+                "role": "user",
+                "content": get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]).rstrip(),
+            }
+        ]
+        return system, prompt
+
+    if LanguageModelStyle == LMStyle.Gemini:
+        prompt = f"{PromptConstants.SYSTEM_MESSAGE_GEMINI}\n"
+        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id])}"
+        return prompt
+
+    if LanguageModelStyle == LMStyle.StarCoderInstruct:
+        prompt = f"{PromptConstants.SYSTEM_MESSAGE_GENERIC}\n"
+        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id])}"
+        return prompt
+
+    if LanguageModelStyle == LMStyle.MistralWeb:
+        chat_messages = [
+            {
+                "role": "system",
+                "content": PromptConstants.SYSTEM_MESSAGE_GENERIC,
+            },
+            {
+                "role": "user",
+                "content":get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]),
+            },
+        ]
+        return chat_messages
+
+    if LanguageModelStyle == LMStyle.CohereCommand:
+        chat_messages = [
+            {
+                "role": "System",
+                "message": PromptConstants.SYSTEM_MESSAGE_GENERIC,
+            },
+        ]
+        message = get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id])
+        return chat_messages, message
+
+    if LanguageModelStyle == LMStyle.DeepSeekCodeInstruct:
+        prompt = f"{PromptConstants.SYSTEM_MESSAGE_DEEPSEEK}\n\n"
+        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id])}"
+        return prompt
+
+    if LanguageModelStyle == LMStyle.CodeQwenInstruct:
+        prompt = f"{PromptConstants.SYSTEM_MESSAGE_CODEQWEN}\n\n"
+        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id])}"
+        return prompt
+
+    if LanguageModelStyle == LMStyle.CodeLLaMaInstruct:
+        prompt = f"[INST] <<SYS>>\n"
+        prompt += f"{PromptConstants.SYSTEM_MESSAGE_GENERIC}\n"
+        prompt += f"<</SYS>>\n\n"
+        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id])}\n"
+        prompt += f"[/INST]"
+        return prompt
+
+    if LanguageModelStyle == LMStyle.MagiCoder:
+        prompt = f"{PromptConstants.SYSTEM_MESSAGE_MAGIC}\n"
+        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id])}"
+        return prompt
+
+    if LanguageModelStyle == LMStyle.WizardCoder:
+        prompt = f"{PromptConstants.SYSTEM_MESSAGE_WIZARD}\n\n"
+        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id])}"
+        return prompt
+
+    if LanguageModelStyle == LMStyle.Phind:
+        prompt = f"### System Prompt\n\n"
+        prompt += f"{PromptConstants.SYSTEM_MESSAGE_PHIND}\n\n"
+        prompt += f"### User Message\n\n"
+        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id])}"
+        return prompt
+
+    if LanguageModelStyle == LMStyle.OC:
+        prompt = f"{PromptConstants.SYSTEM_MESSAGE_GENERIC}\n\n"
+        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id])}"
+        return prompt
+
+    if LanguageModelStyle == LMStyle.Eurusx:
+        prompt = "[INST] Write Python code to solve the task:\n"
+        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id])}"
+        prompt += "[/INST]"
+        return prompt
+
+    # if (
+    #     LanguageModelStyle == LMStyle.Smaug2
+    #     or LanguageModelStyle == LMStyle.Qwen1point5
+    # ):
+    #     prompt = f"{get_qwen_question_template_answer(question)}"
+    #     return prompt
+
+    # if LanguageModelStyle == LMStyle.GenericBase:
+    #     prompt = get_base_model_question_template_answer(question)
+    #     return prompt
+
+    raise NotImplementedError(
+        f"LanguageModelStyle {LanguageModelStyle} not implemented"
+    )
+
+def format_prompt_generation_cot(
+    question: CodeGenerationProblem, LanguageModelStyle: LMStyle
+) -> str:
+    if LanguageModelStyle in [LMStyle.OpenAIChat, LMStyle.DeepSeekAPI]:
+        chat_messages = [
+            {
+                "role": "system",
+                "content": PromptConstants.SYSTEM_MESSAGE_GENERIC,
+            },
+        ]
+        chat_messages += [
+            {
+                "role": "user",
+                "content": get_cot_question_template_answer(question),
+            },
+        ]
+        return chat_messages
+
+    if LanguageModelStyle == LMStyle.LLaMa3:
+        chat_messages = [
+            {
+                "role": "system",
+                "content": PromptConstants.SYSTEM_MESSAGE_GENERIC,
+            },
+        ]
+        chat_messages += [
+            {
+                "role": "user",
+                "content": get_cot_question_template_answer(question),
+            },
+        ]
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(
+            "meta-llama/Meta-Llama-3-8B-Instruct", padding_side="left", use_fast=False
+        )
+        return tokenizer.apply_chat_template(
+            chat_messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            truncation=False,
+            padding=False,
+        )
+
+    if LanguageModelStyle == LMStyle.Claude:
+        prompt = f"{HUMAN_PROMPT}\n"
+        prompt += f"{PromptConstants.SYSTEM_MESSAGE_GENERIC}\n\n"
+        prompt += f"{get_cot_question_template_answer(question).rstrip()}\n"
+        prompt += f"{AI_PROMPT}"
+        return prompt
+
+    if LanguageModelStyle == LMStyle.Claude3:
+        system = PromptConstants.SYSTEM_MESSAGE_GENERIC
+        prompt = [
+            {
+                "role": "user",
+                "content": get_cot_question_template_answer(question).rstrip(),
+            }
+        ]
+        return system, prompt
+
+    if LanguageModelStyle == LMStyle.Gemini:
+        prompt = f"{PromptConstants.SYSTEM_MESSAGE_GEMINI}\n"
+        prompt += f"{get_cot_question_template_answer(question)}"
+        return prompt
+
+    if LanguageModelStyle == LMStyle.StarCoderInstruct:
+        prompt = f"{PromptConstants.SYSTEM_MESSAGE_GENERIC}\n"
+        prompt += f"{get_cot_question_template_answer(question)}"
+        return prompt
+
+    if LanguageModelStyle == LMStyle.MistralWeb:
+        chat_messages = [
+            {
+                "role": "system",
+                "content": PromptConstants.SYSTEM_MESSAGE_GENERIC,
+            },
+            {
+                "role": "user",
+                "content": get_cot_question_template_answer(question),
+            },
+        ]
+        return chat_messages
+
+    if LanguageModelStyle == LMStyle.CohereCommand:
+        chat_messages = [
+            {
+                "role": "System",
+                "message": PromptConstants.SYSTEM_MESSAGE_GENERIC,
+            },
+        ]
+        message = get_cot_question_template_answer(question)
+        return chat_messages, message
+
+    if LanguageModelStyle == LMStyle.DeepSeekCodeInstruct:
+        prompt = f"{PromptConstants.SYSTEM_MESSAGE_DEEPSEEK}\n\n"
+        prompt += f"{get_deepseekcode_question_template_answer(question)}"
+        return prompt
+
+    if LanguageModelStyle == LMStyle.CodeQwenInstruct:
+        prompt = f"{PromptConstants.SYSTEM_MESSAGE_CODEQWEN}\n\n"
+        prompt += f"{get_codeqwen_question_template_answer(question)}"
+        return prompt
+
+    if LanguageModelStyle == LMStyle.CodeLLaMaInstruct:
+        prompt = f"[INST] <<SYS>>\n"
+        prompt += f"{PromptConstants.SYSTEM_MESSAGE_GENERIC}\n"
+        prompt += f"<</SYS>>\n\n"
+        prompt += f"{get_cllama_question_template_answer(question)}\n"
+        prompt += f"[/INST]"
+        return prompt
+
+    if LanguageModelStyle == LMStyle.MagiCoder:
+        prompt = f"{PromptConstants.SYSTEM_MESSAGE_MAGIC}\n"
+        prompt += f"{get_magicoder_question_template_answer(question)}"
+        return prompt
+
+    if LanguageModelStyle == LMStyle.WizardCoder:
+        prompt = f"{PromptConstants.SYSTEM_MESSAGE_WIZARD}\n\n"
+        prompt += f"{get_wizard_question_template_answer(question)}"
+        return prompt
+
+    if LanguageModelStyle == LMStyle.Phind:
+        prompt = f"### System Prompt\n\n"
+        prompt += f"{PromptConstants.SYSTEM_MESSAGE_PHIND}\n\n"
+        prompt += f"### User Message\n\n"
+        prompt += f"{get_phind_question_template_answer(question)}"
+        return prompt
+
+    if LanguageModelStyle == LMStyle.OC:
+        prompt = f"{PromptConstants.SYSTEM_MESSAGE_GENERIC}\n\n"
+        prompt += f"{get_cot_question_template_answer(question)}"
+        return prompt
+
+    if LanguageModelStyle == LMStyle.Eurusx:
+        prompt = "[INST] Write Python code to solve the task:\n"
+        prompt += f"{get_cot_question_template_answer(question)}"
+        prompt += "[/INST]"
+        return prompt
+
+    if (
+        LanguageModelStyle == LMStyle.Smaug2
+        or LanguageModelStyle == LMStyle.Qwen1point5
+    ):
+        prompt = f"{get_qwen_question_template_answer(question)}"
+        return prompt
+
+    if LanguageModelStyle == LMStyle.GenericBase:
+        prompt = get_base_model_question_template_answer(question)
+        return prompt
+
+    raise NotImplementedError(
+        f"LanguageModelStyle {LanguageModelStyle} not implemented"
+    )
 
 def format_prompt_generation(
     question: CodeGenerationProblem, LanguageModelStyle: LMStyle

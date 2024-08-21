@@ -1,4 +1,9 @@
 from typing import Union
+import json
+from functools import partial
+from rank_bm25 import BM25Okapi
+from collections import defaultdict
+from enum import Enum
 
 from lcb_runner.utils.scenarios import Scenario
 from lcb_runner.lm_styles import LanguageModel
@@ -14,7 +19,10 @@ from lcb_runner.prompts import (
     format_prompt_execution,
     format_prompt_execution_cot,
     format_prompt_self_repair,
+    format_prompt_generation_cot,
+    format_prompt_generation_cot_retrieval,
 )
+
 from lcb_runner.utils.extraction_utils import (
     extract_code,
     extract_test_output_code,
@@ -36,6 +44,47 @@ BenchMarkType = list[
     Union[CodeGenerationProblem, CodeExecutionProblem, TestOutputPredictionProblem]
 ]
 
+class RetrievalSetting(Enum):
+    EPISODIC = 1
+    OPTIMAL = 2
+
+
+# [TODO] Only works for 1 initial attempt json atm! 
+def formulate_retrieval_base(
+    eval_results, benchmark, n=1, retrieval_setting=RetrievalSetting.EPISODIC
+) -> dict[str, str]:
+    '''
+    Formulates a retrieval knowledge base. Episodic setting takes in 
+    an unaltered eval_results json file, Optimal setting needs a json file
+    with output list solutions replaced with the desired item for retrieval.
+    '''
+    result = dict()
+    retrieved = defaultdict(list)
+    
+    for problem in benchmark:
+        if retrieval_setting == RetrievalSetting.EPISODIC:
+            corpus = [question['output_list'][0] for question in eval_results if question['graded_list'][0] and question['question_id'] != problem.question_id]
+            tokenized_corpus = [doc.split(' ') for doc in corpus]
+            bm25 = BM25Okapi(tokenized_corpus)
+
+            curr_eval = [item for item in eval_results if item['question_id'] == problem.question_id][0]
+            tokenized_query = curr_eval['output_list'][0].split(' ')
+            similar_problem_texts = bm25.get_top_n(tokenized_query, corpus, n=n)
+
+            final_text = ''
+            for i, text in enumerate(similar_problem_texts):
+                retrieved_problem = [item for item in eval_results if item['output_list'][0] == text]
+                assert len(retrieved_problem) == 1
+                final_text += f'Similar Problem Number {i+1}\n\nProblem Description:\n ' + retrieved_problem[0]['question_content'] + '\n\n Problem Solution: \n' + text + '\n\n'
+                retrieved[problem.question_id].append(retrieved_problem[0]['question_id'])
+            
+            result[problem.question_id] = final_text
+        
+        elif retrieval_setting == RetrievalSetting.OPTIMAL:
+            curr_eval = [item for item in eval_results if item['question_id'] == problem.question_id][0]
+            result[problem.question_id] = curr_eval['output_list'][0]
+
+    return result, retrieved
 
 def build_prompt_benchmark(
     args,
@@ -54,7 +103,20 @@ def build_prompt_benchmark(
         else:
             benchmark = load_code_generation_dataset(args.release_version)
         benchmark = sorted(benchmark, key=lambda x: x.question_id)
-        format_prompt = format_prompt_generation
+        if args.cot_code_generation:
+            if args.retrieval_json:
+                with open(args.retrieval_json, 'r') as f:
+                    eval_results = json.load(f)
+                if args.retrieval_setting == 1: # Episodic
+                    retrieval_base, id_to_retrieved = formulate_retrieval_base(eval_results, benchmark)
+                elif args.retrieval_setting == 2: # Optimal
+                    retrieval_base, id_to_retrieved = formulate_retrieval_base(eval_results, benchmark, retrieval_setting=RetrievalSetting.OPTIMAL)
+                # retrieval base: question_id -> retrieved_text
+                format_prompt = partial(format_prompt_generation_cot_retrieval, retrieval_base=retrieval_base)
+            else:
+                format_prompt = format_prompt_generation_cot
+        else:
+            format_prompt = format_prompt_generation
     elif scenario == Scenario.testoutputprediction:
         benchmark = load_test_prediction_dataset(args.release_version)
         benchmark = sorted(benchmark, key=lambda x: (x.question_id, x.test_id))

@@ -42,9 +42,20 @@ def get_args():
         help="whether to use full set of tests (slower and more memory intensive evaluation)",
     )
     parser.add_argument(
+        "--retrieval_setting",
+        type=int,
+        default=1,
+        help="1 for Episodic, 2 for Optimal",
+    )
+    parser.add_argument(
         "--cot_code_execution",
         action="store_true",
         help="whether to use CoT in code execution scenario",
+    )
+    parser.add_argument(
+        "--cot_code_generation",
+        action="store_true",
+        help="whether to use CoT in code generation scenario",
     )
     parser.add_argument(
         "--n", type=int, default=10, help="Number of samples to generate"
@@ -116,6 +127,12 @@ def get_args():
         type=str,
         default=None,
         help="Folder name to save the custom output results (output file folder modified if None)"
+    )
+    parser.add_argument(
+        '--retrieval_json',
+        type=str,
+        default=None,
+        help="Path to the retrieval base, provide if retrieval is enabled"
     )
     parser.add_argument("--dtype", type=str, default="bfloat16", help="Dtype for vllm")
 
