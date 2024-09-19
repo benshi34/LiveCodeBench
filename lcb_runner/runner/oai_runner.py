@@ -1,5 +1,6 @@
 import os
 from time import sleep
+from typing import Union
 
 try:
     import openai
@@ -8,6 +9,7 @@ except ImportError as e:
     pass
 
 from lcb_runner.runner.base_runner import BaseRunner
+# from lcb_runner.runner.parallel_runner import gpts
 
 
 class OpenAIRunner(BaseRunner):
@@ -57,3 +59,48 @@ class OpenAIRunner(BaseRunner):
             print("Exception: ", repr(e))
             raise e
         return [c.message.content for c in response.choices]
+
+    # def run_batch(self, prompts: list[str | list[dict[str, str]]]) -> list[list[str]]:
+    #     responses = gpts(prompts)
+    #     code_responses = [self._get_code_from_solution(response) for response in responses]
+    #     return [list(item) for item in zip(responses, code_responses)]
+
+    def _get_code_from_solution(self, solution: str) -> Union[str, None]:
+        '''
+        Assume code is in a Markdown block delimited by ```python and ```.
+        Returns string of just the code, or None if not found.
+        '''
+        # try:
+        #     begin_delim = "```python"
+        #     end_delim = "```"
+        #     begin_idx = solution.index(begin_delim)
+        #     end_idx = solution.index(end_delim, begin_idx+len(begin_delim))
+        #     return solution[begin_idx + len(begin_delim) : end_idx]
+        # except Exception as e:
+        #     print('Could not parse code from generated solution — returning entire solution')
+        #     print(e)
+        #     return solution
+        parsed = self._extract_code_delim(solution, '```python', '```')
+        if parsed:
+            return parsed
+        parsed = self._extract_code_delim(solution, '```python3', '```')
+        if parsed:
+            return parsed
+        parsed = self._extract_code_delim(solution, '```Python', '```')
+        if parsed:
+            return parsed
+        parsed = self._extract_code_delim(solution, '```Python3', '```')
+        if parsed:
+            return parsed
+        print('Could not parse code from generated solution — returning entire solution')
+        return solution
+
+    def _extract_code_delim(self, solution: str, begin_delim: str, end_delim: str) -> Union[str, None]:
+        try:
+            begin_idx = solution.index(begin_delim)
+            end_idx = solution.index(end_delim, begin_idx+len(begin_delim))
+            return solution[begin_idx + len(begin_delim) : end_idx]
+        except Exception as e:
+            print(e)
+            return solution
+

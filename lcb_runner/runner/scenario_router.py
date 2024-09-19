@@ -1,9 +1,11 @@
-from typing import Union
+from typing import Union, Dict
 import json
 from functools import partial
 from rank_bm25 import BM25Okapi
 from collections import defaultdict
 from enum import Enum
+import datetime
+from datetime import datetime
 
 from lcb_runner.utils.scenarios import Scenario
 from lcb_runner.lm_styles import LanguageModel
@@ -49,9 +51,8 @@ class RetrievalSetting(Enum):
     OPTIMAL = 2
 
 
-# [TODO] Only works for 1 initial attempt json atm! 
 def formulate_retrieval_base(
-    eval_results, benchmark, n=1, retrieval_setting=RetrievalSetting.EPISODIC
+    queries: Dict[str, str], corpus: Dict[str, str], benchmark, model: str, num_docs=1, retrieval_setting=RetrievalSetting.EPISODIC
 ) -> dict[str, str]:
     '''
     Formulates a retrieval knowledge base. Episodic setting takes in 
@@ -60,30 +61,45 @@ def formulate_retrieval_base(
     '''
     result = dict()
     retrieved = defaultdict(list)
+
+    tokenized_corpus = [doc.split(' ') for doc in corpus.values()]
+    bm25 = BM25Okapi(tokenized_corpus)
     
     for problem in benchmark:
         if retrieval_setting == RetrievalSetting.EPISODIC:
-            corpus = [question['output_list'][0] for question in eval_results if question['graded_list'][0] and question['question_id'] != problem.question_id]
-            tokenized_corpus = [doc.split(' ') for doc in corpus]
-            bm25 = BM25Okapi(tokenized_corpus)
-
-            curr_eval = [item for item in eval_results if item['question_id'] == problem.question_id][0]
-            tokenized_query = curr_eval['output_list'][0].split(' ')
-            similar_problem_texts = bm25.get_top_n(tokenized_query, corpus, n=n)
+            # corpus = [question['output_list'][0] for question in eval_results if question['graded_list'][0] and question['question_id'] != problem.question_id]
+            # curr_eval = [item for item in eval_results if item['question_id'] == problem.question_id][0]
+            tokenized_query = queries[problem.question_id].split(' ')
+            similar_problem_texts = bm25.get_top_n(tokenized_query, list(corpus.values()), n=num_docs+1)
 
             final_text = ''
+            retrieved_problems = []
             for i, text in enumerate(similar_problem_texts):
-                retrieved_problem = [item for item in eval_results if item['output_list'][0] == text]
-                assert len(retrieved_problem) == 1
-                final_text += f'Similar Problem Number {i+1}\n\nProblem Description:\n ' + retrieved_problem[0]['question_content'] + '\n\n Problem Solution: \n' + text + '\n\n'
-                retrieved[problem.question_id].append(retrieved_problem[0]['question_id'])
+                # For each text, you get the current retrieved problem (inefficiently)
+                retrieved_problems.extend([key for key in corpus if corpus[key] == text])
+            assert len(retrieved_problems) == num_docs + 1
             
+            for i, question_title in enumerate(retrieved_problems):
+                if question_title.lower() == problem.question_title.lower():
+                    similar_problem_texts.pop(i)
+                    retrieved_problems.pop(i)
+                    break
+            
+            similar_problem_texts = similar_problem_texts[:num_docs]
+            retrieved_problems = retrieved_problems[:num_docs]
+
+            retrieved[problem.question_id].extend(retrieved_problems)
+            for i, text in enumerate(similar_problem_texts):
+                final_text += f'Similar Problem Number {i+1}\n\n {text}'
             result[problem.question_id] = final_text
         
-        elif retrieval_setting == RetrievalSetting.OPTIMAL:
-            curr_eval = [item for item in eval_results if item['question_id'] == problem.question_id][0]
-            result[problem.question_id] = curr_eval['output_list'][0]
-
+        # elif retrieval_setting == RetrievalSetting.OPTIMAL:
+        #     curr_eval = [item for item in eval_results if item['question_id'] == problem.question_id][0]
+        #     result[problem.question_id] = curr_eval['output_list'][0]
+    timestamp_str = datetime.now().strftime("%m_%d_%Y_%H_%M_%S_%f")
+    with open(f'retrieval_matches_{model}_{timestamp_str}.json', 'w') as f:
+        json.dump([result, retrieved], f)
+    
     return result, retrieved
 
 def build_prompt_benchmark(
@@ -104,15 +120,21 @@ def build_prompt_benchmark(
             benchmark = load_code_generation_dataset(args.release_version)
         benchmark = sorted(benchmark, key=lambda x: x.question_id)
         if args.cot_code_generation:
-            if args.retrieval_json:
-                with open(args.retrieval_json, 'r') as f:
-                    eval_results = json.load(f)
-                if args.retrieval_setting == 1: # Episodic
-                    retrieval_base, id_to_retrieved = formulate_retrieval_base(eval_results, benchmark)
-                elif args.retrieval_setting == 2: # Optimal
-                    retrieval_base, id_to_retrieved = formulate_retrieval_base(eval_results, benchmark, retrieval_setting=RetrievalSetting.OPTIMAL)
-                # retrieval base: question_id -> retrieved_text
-                format_prompt = partial(format_prompt_generation_cot_retrieval, retrieval_base=retrieval_base)
+            if args.query_json or args.corpus_json:
+                if args.query_json and args.corpus_json:
+                    with open(args.query_json, 'r') as f:
+                        # Queries is dictionary: problem_id -> query_text
+                        queries = json.load(f)
+                    with open(args.corpus_json, 'r') as f:
+                        corpus = json.load(f)
+                    if args.retrieval_setting == 1: # Episodic
+                        retrieval_base, id_to_retrieved = formulate_retrieval_base(queries, corpus, benchmark, args.model, num_docs=args.num_docs)
+                    elif args.retrieval_setting == 2: # Optimal = directly providing the retrieved text
+                        retrieval_base = corpus
+                    # retrieval base: question_id -> retrieved_text
+                    format_prompt = partial(format_prompt_generation_cot_retrieval, retrieval_base=retrieval_base)
+                else:
+                    raise RuntimeError("If specifying retrieval query/corpus, need to specify both --query_json and --corpus_json arguments.")
             else:
                 format_prompt = format_prompt_generation_cot
         else:

@@ -129,10 +129,28 @@ def get_args():
         help="Folder name to save the custom output results (output file folder modified if None)"
     )
     parser.add_argument(
-        '--retrieval_json',
+        '--query_json',
         type=str,
         default=None,
-        help="Path to the retrieval base, provide if retrieval is enabled"
+        help="Path to the query base, provide if retrieval is enabled. Query of form problem_id to query text."
+    )
+    parser.add_argument(
+        '--corpus_json',
+        type=str,
+        default=None,
+        help="Path to the corpus base, provide if retrieval is enabled. Corpus of the form document_id to document."
+    )
+    parser.add_argument(
+        '--num_docs',
+        type=int,
+        default=1,
+        help="Number of documents to retrieve"
+    )
+    parser.add_argument(
+        '--corpus_name',
+        type=str,
+        default="",
+        help="Name of corpus"
     )
     parser.add_argument("--dtype", type=str, default="bfloat16", help="Dtype for vllm")
 

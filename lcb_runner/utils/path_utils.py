@@ -26,8 +26,13 @@ def get_output_path(model_repr:str, args) -> str:
     scenario: Scenario = args.scenario
     n = args.n
     temperature = args.temperature
-    cot_suffix = "_cot" if args.cot_code_execution else ""
-    path = f"output/{model_repr}/{scenario}_{n}_{temperature}{cot_suffix}_{timestamp_str}.json"
+    cot_suffix = "_cot" if args.cot_code_execution or args.cot_code_generation else ""
+    retrieval_suffix = "_retrieval" if args.query_json or args.corpus_json else ""
+    if retrieval_suffix:
+        num_docs_suffix = f"_p{args.num_docs}"
+    else:
+        num_docs_suffix = ""
+    path = f"output/{model_repr}/{scenario}_{n}_{temperature}{cot_suffix}{retrieval_suffix}{num_docs_suffix}{args.corpus_name}_{timestamp_str}.json"
     ensure_dir(path)
     return path
 
