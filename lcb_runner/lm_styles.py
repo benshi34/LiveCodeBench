@@ -26,6 +26,8 @@ class LMStyle(Enum):
     OC = "OC"
     Eurusx = "Eurusx"
 
+    TogetherChat = "TogetherChat"
+
     Qwen1point5 = "Qwen1point5"
     Smaug2 = "Smaug2"
 
@@ -45,6 +47,20 @@ class LanguageModel:
 
 
 LanguageModelList: list[LanguageModel] = [
+    LanguageModel(
+        "meta-llama/Llama-3-70b-chat-hf",
+        "LLama3-70b-Instruct",
+        LMStyle.TogetherChat,
+        datetime(2023, 1, 1),
+        link="https://huggingface.co/meta-llama/Meta-Llama-3-70B",
+    ),
+    LanguageModel(
+        "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+        "LLama3-1-70b-Instruct",
+        LMStyle.TogetherChat,
+        datetime(2023, 1, 1),
+        link="https://huggingface.co/meta-llama/Meta-Llama-3-70B",
+    ),
     LanguageModel(
         "meta-llama/Meta-Llama-3-70B",
         "LLama3-70b-Base",

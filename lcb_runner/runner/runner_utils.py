@@ -2,6 +2,11 @@ from lcb_runner.lm_styles import LMStyle, LanguageModel
 
 
 def build_runner(args, model: LanguageModel):
+    if model.model_style == LMStyle.TogetherChat:
+        from lcb_runner.runner.together_runner import TogetherAIRunner
+
+        return TogetherAIRunner(args, model)
+
     if model.model_style == LMStyle.OpenAIChat:
         from lcb_runner.runner.oai_runner import OpenAIRunner
 

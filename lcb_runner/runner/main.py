@@ -1,6 +1,7 @@
 import os
 import json
 
+from lcb_runner.lm_styles import LMStyle
 from lcb_runner.runner.parser import get_args
 from lcb_runner.utils.scenarios import Scenario
 from lcb_runner.lm_styles import LanguageModelStore
@@ -13,9 +14,10 @@ from lcb_runner.runner.scenario_router import (
     sort_and_extract_save_results,
     get_metrics,
 )
-
+from dotenv import load_dotenv
 
 def main():
+    load_dotenv()
     args = get_args()
 
     model = LanguageModelStore[args.model]
@@ -61,7 +63,30 @@ def main():
     else:
         old_save_results = []
         remaining_benchmark = benchmark
+    
+    # def convert_to_dict(problem):
+    #     info = {}
+    #     info['question_title'] = problem.question_title
+    #     info['question_content'] = problem.question_content
+    #     info['platform'] = str(problem.platform)
+    #     info['question_id'] = problem.question_id
+    #     info['contest_id'] = problem.contest_id
+    #     info['contest_date'] = str(problem.contest_date)
+    #     info['starter_code'] = problem.starter_code
+    #     return info
+    
+    # prompts = {}
 
+    # for problem in remaining_benchmark:
+    #     p = format_prompt(problem, LMStyle.DeepSeekCodeInstruct)
+    #     info = convert_to_dict(problem)
+    #     prompts[info['question_id']] = p
+    
+    # with open('benchmark_prompts_ds_optimal_retrieval.json', 'w') as f:
+    #     json.dump(prompts, f)
+    
+    # assert 1 == 2
+    
     if len(remaining_benchmark) > 0:
         runner = build_runner(args, model)
         results: list[list[str]] = runner.run_main(remaining_benchmark, format_prompt)
@@ -91,6 +116,16 @@ def main():
 
     with open(output_path, "w") as f:
         json.dump(save_results, f, indent=4)
+
+    # with open('/scratch/gpfs/qbshi/HELMET/dscoder_retrieval_lcb_outputs.json') as f:
+    #     output_dict = json.load(f)
+    
+    # combined_results = []
+    # for problem in remaining_benchmark:
+    #     problem_id = problem.question_id
+    #     output = output_dict[problem_id]['output']
+    #     code = runner._get_code_from_solution(output)
+    #     combined_results.append([[output], [code]])
 
     if args.evaluate:
         if args.continue_existing_with_eval and os.path.exists(eval_all_file):

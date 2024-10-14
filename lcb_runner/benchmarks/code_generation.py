@@ -53,6 +53,17 @@ class CodeGenerationProblem:
     private_test_cases: list[Test]
     metadata: dict
 
+    def toJSON(self):
+        info = {}
+        info['question_title'] = self.question_title
+        info['question_content'] = self.question_content
+        info['platform'] = str(self.platform)
+        info['question_id'] = self.question_id
+        info['contest_id'] = self.contest_id
+        info['contest_date'] = str(self.contest_date)
+        info['starter_code'] = self.starter_code
+        return json.dumps(info)
+
     def __post_init__(self):
         self.platform = Platform(self.platform)
         self.difficulty = Difficulty(self.difficulty)

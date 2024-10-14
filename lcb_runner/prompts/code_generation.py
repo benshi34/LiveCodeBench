@@ -55,10 +55,8 @@ def get_cot_question_template_answer(question: CodeGenerationProblem):
 delimiters, and include exactly one block of code with the entire solution. 
 Additionally, it is extremely important you use the starter_code provided, as your answers will be evaluated with the assumption that your output utilizes the starter code.
 You may use the following steps to help you solve the problem. Reason through the problem and:
-1. Restate the problem in plain English
-2. Conceptualize a solution first in plain English
-3. Write a pseudocode solution
-4. Output the final Python solution with your solution steps in comments. (Make sure to wrap this in python delimiters!)
+1. Conceptualize a solution first in plain English
+2. Output the final Python solution with your solution steps in comments. (Make sure to wrap this in python delimiters!)
 Make sure to make your reasoning explicitly clear, as people will be reading your solution to aid them in solving other problems.
 No outside libraries are allowed.
 
@@ -74,10 +72,8 @@ No outside libraries are allowed.
         prompt = f"""Please reply with a python solution to the below problem. Make sure to wrap your code in '```python' and '```' Markdown
 delimiters, and include exactly one block of code with the entire solution in the final code step.
 You may use the following steps to help you solve the problem. Reason through the problem and:
-1. Restate the problem in plain English
-2. Conceptualize a solution first in plain English
-3. Write a pseudocode solution
-4. Output the final Python solution with your solution steps in comments. (Make sure to wrap this in python delimiters!)
+1. Conceptualize a solution first in plain English
+2. Output the final Python solution with your solution steps in comments. (Make sure to wrap this in python delimiters!)
 Make sure to make your reasoning explicitly clear, as people will be reading your solution to aid them in solving other problems.
 No outside libraries are allowed.
 
@@ -88,51 +84,43 @@ No outside libraries are allowed.
 
 def get_cot_retrieval_question_template_answer(question: CodeGenerationProblem, retrieval_text: str):
     if question.starter_code:
-        prompt = f"""Please reply with a python solution to the below problem. Make sure to wrap your output code in '```python' and '```' Markdown
-delimiters, and include exactly one block of code with the entire solution. You will also be given a similar problem + solution that has some degree of commonality with the problem you are currently solving: use it to your advantage.
-Additionally, it is extremely important you use the starter_code provided, as your answers will be evaluated with the assumption that your output utilizes the starter code.
-You may use the following steps to help you solve the problem. Reason through the problem and:
-1. Restate the problem in plain English
-2. Conceptualize a solution first in plain English
-3. Write a pseudocode solution
-4. Output the final Python solution with your solution steps in comments. (Make sure to wrap this in python delimiters!)
-Make sure to make your reasoning explicitly clear, as people will be reading your solution to aid them in solving other problems.
+        prompt = f"""Your job is to solve the following python coding problem. You will also be given a similar problem + solution that has some degree of commonality with the problem you are currently solving. use it to your advantage. It is extremely important you use the starter_code provided, as your answers will be evaluated with the assumption that your output utilizes the starter code.
+Reason through the problem and:
+1. Conceptualize a solution first in plain English
+2. Output the final Python solution with your solution steps in comments. (Make sure to wrap this in python delimiters!)
 No outside libraries are allowed.
 
-Here is the similar problem first:
-[BEGIN SIMILAR PROBLEM AND SOLUTION]
-{retrieval_text}
-[END SIMILAR PROBLEM AND SOLUTION]
-
-And here is the problem you are to solve:
+Here is the problem you are to solve:
 [BEGIN PROBLEM]
 {question.question_content}
 [END PROBLEM]
 
+Here is the starter code with function definitions that you must use!
 [BEGIN STARTER CODE]
 ```python\n{question.starter_code}\n```\n\n
 [END STARTER CODE]
-"""
-    else: 
-        prompt = f"""Please reply with a python solution to the below problem. Make sure to wrap your code in '```python' and '```' Markdown
-delimiters, and include exactly one block of code with the entire solution in the final code step. You will also be given a similar problem + solution that has some degree of commonality with the problem you are currently solving: use it to your advantage.
-You may use the following steps to help you solve the problem. Reason through the problem and:
-1. Restate the problem in plain English
-2. Conceptualize a solution first in plain English
-3. Write a pseudocode solution
-4. Output the final Python solution with your solution steps in comments. (Make sure to wrap this in python delimiters!)
-Make sure to make your reasoning explicitly clear, as people will be reading your solution to aid them in solving other problems.
-No outside libraries are allowed.
 
-Here is the similar problem first:
+Here are the similar problem(s):
 [BEGIN SIMILAR PROBLEM AND SOLUTION]
 {retrieval_text}
 [END SIMILAR PROBLEM AND SOLUTION]
+"""
+    else: 
+        prompt = f"""Your job is to solve the following python coding problem. You will also be given a similar problem + solution that has some degree of commonality with the problem you are currently solving. use it to your advantage.
+Reason through the problem and:
+1. Conceptualize a solution first in plain English
+2. Output the final Python solution with your solution steps in comments. (Make sure to wrap this in python delimiters!)
+No outside libraries are allowed.
 
-And here is the problem you are to solve:
+Here is the problem you are to solve:
 [BEGIN PROBLEM]
 {question.question_content}
 [END PROBLEM]
+
+Here are the similar problem(s):
+[BEGIN SIMILAR PROBLEM AND SOLUTION]
+{retrieval_text}
+[END SIMILAR PROBLEM AND SOLUTION]
 """
     return prompt
 
