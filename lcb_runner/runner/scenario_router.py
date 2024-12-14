@@ -157,7 +157,18 @@ def build_prompt_benchmark(
             format_prompt = format_prompt_execution
     else:
         raise ValueError(f"Scenario {scenario} not implemented")
-    return benchmark, format_prompt
+    
+    if args.selected_problems_path:
+        with open(args.selected_problems_path, 'r') as f:
+            selected_problems = json.load(f)
+        final_benchmark = []
+        for problem in benchmark:
+            if problem.question_title in selected_problems:
+                final_benchmark.append(problem)
+    else:
+        final_benchmark = benchmark
+
+    return final_benchmark, format_prompt
 
 
 def combine_results(

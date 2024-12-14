@@ -5,6 +5,7 @@ from enum import Enum
 
 class LMStyle(Enum):
     OpenAIChat = "OpenAIChat"
+    O1Chat = "O1Chat"
     Claude = "Claude"  # Claude 1 and Claude 2
     Claude3 = "Claude3"
     Gemini = "Gemini"
@@ -282,6 +283,20 @@ LanguageModelList: list[LanguageModel] = [
         "gpt-4o-2024-05-13",
         "GPT-4O-2024-05-13",
         LMStyle.OpenAIChat,
+        datetime(2023, 4, 30),
+        link="https://openai.com/index/spring-update",
+    ),
+    LanguageModel(
+        "o1-mini-2024-09-12",
+        "O1-mini-2024-09-12",
+        LMStyle.O1Chat,
+        datetime(2023, 4, 30),
+        link="https://openai.com/index/spring-update",
+    ),
+    LanguageModel(
+        "o1-preview-2024-09-12",
+        "O1-preview-2024-09-12",
+        LMStyle.O1Chat,
         datetime(2023, 4, 30),
         link="https://openai.com/index/spring-update",
     ),

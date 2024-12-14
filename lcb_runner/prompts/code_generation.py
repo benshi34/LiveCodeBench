@@ -82,11 +82,20 @@ No outside libraries are allowed.
 [END PROBLEM]"""
     return prompt
 
+# 1. Describe the similar problem given, and the algorithm and approach the given solution took to solve the problem.
+# 2. Using the similar problem, conceptualize a solution for the current problem first in plain English, taking inspiration from the design choices of the provided similar problem.
+# 3. Output the final Python solution with your solution steps in comments. (Make sure to wrap this in python delimiters!)
+# Here are some tips and tricks you jotted down:
+# [BEGIN TIPS AND TRICKS]
+# 1. I often write solutions that are correct, but does not pass all the test cases because they are algorithmically inefficient. Some examples include: recalculating a sliding window value over and over again instead of just adding the front and the end values, or iterating through directions even though there's a constant solution that requires just a bit more of thinking to arrive at.
+# 2. Sometimes I misread problems: such as I check for the suffix instead of the prefix, or something small like that.
+# 3. Very frequently I use greedy solutions when I should be using dynamic programming solutions. It is important for me to think hard about when greedy is good, and when greedy will not actually arrive at an optimal solution.
+# [END TIPS AND TRICKS]
 def get_cot_retrieval_question_template_answer(question: CodeGenerationProblem, retrieval_text: str):
     if question.starter_code:
-        prompt = f"""Your job is to solve the following python coding problem. You will also be given a similar problem + solution that has some degree of commonality with the problem you are currently solving. use it to your advantage. It is extremely important you use the starter_code provided, as your answers will be evaluated with the assumption that your output utilizes the starter code.
+        prompt = f"""Your job is to solve the following python coding problem. You will also be given problem that uses highly similar algorithms to the problem that you are currently solving. It is extremely important you use the starter_code provided, as your answers will be evaluated with the assumption that your output utilizes the starter code. You are also given some tips and tricks you jotted down to yourself when solving past problems. Make sure to keep this in mind when coming up with a solution.
 Reason through the problem and:
-1. Conceptualize a solution first in plain English
+1. Conceptualize a solution first in plain English, taking inspiration from the design choices of the provided similar problem.
 2. Output the final Python solution with your solution steps in comments. (Make sure to wrap this in python delimiters!)
 No outside libraries are allowed.
 
@@ -105,7 +114,7 @@ Here are the similar problem(s):
 {retrieval_text}
 [END SIMILAR PROBLEM AND SOLUTION]
 """
-    else: 
+    else: # No starter code problems (atcoder) we will not provide similar problems for now since we only care about Leetcode ATM.
         prompt = f"""Your job is to solve the following python coding problem. You will also be given a similar problem + solution that has some degree of commonality with the problem you are currently solving. use it to your advantage.
 Reason through the problem and:
 1. Conceptualize a solution first in plain English
@@ -124,6 +133,39 @@ Here are the similar problem(s):
 """
     return prompt
 
+def get_cot_retrieval_question_template_answer_o1(question: CodeGenerationProblem, retrieval_text: str):
+    if question.starter_code:
+        prompt = f"""Your job is to solve the following python coding problem. You will also be given problem that uses highly similar algorithms to the problem that you are currently solving: be sure to use the similar problem to your advantage. It is also extremely important you use the starter_code provided, as your answers will be evaluated with the assumption that your output utilizes the starter code.
+
+Here is the problem you are to solve:
+[BEGIN PROBLEM]
+{question.question_content}
+[END PROBLEM]
+
+Here is the starter code with function definitions that you must use!
+[BEGIN STARTER CODE]
+```python\n{question.starter_code}\n```\n\n
+[END STARTER CODE]
+
+Here are the similar problem(s):
+[BEGIN SIMILAR PROBLEM AND SOLUTION]
+{retrieval_text}
+[END SIMILAR PROBLEM AND SOLUTION]
+"""
+    else: 
+        prompt = f"""Your job is to solve the following python coding problem. You will also be given problem that uses highly similar algorithms to the problem that you are currently solving: be sure to use the similar problem to your advantage.
+
+Here is the problem you are to solve:
+[BEGIN PROBLEM]
+{question.question_content}
+[END PROBLEM]
+
+Here are the similar problem(s):
+[BEGIN SIMILAR PROBLEM AND SOLUTION]
+{retrieval_text}
+[END SIMILAR PROBLEM AND SOLUTION]
+"""
+    return prompt
 
 def get_cllama_question_template_answer(question: CodeGenerationProblem):
     prompt = f"### Question\n{question.question_content}\n\n"
@@ -281,7 +323,7 @@ def get_base_model_question_template_answer(question: CodeGenerationProblem):
 def format_prompt_generation_cot_retrieval(
     question: CodeGenerationProblem, LanguageModelStyle: LMStyle, retrieval_base
 ) -> str:
-    if LanguageModelStyle in [LMStyle.OpenAIChat, LMStyle.DeepSeekAPI]:
+    if LanguageModelStyle in [LMStyle.OpenAIChat, LMStyle.DeepSeekAPI, LMStyle.TogetherChat]:
         chat_messages = [
             {
                 "role": "system",
@@ -291,11 +333,18 @@ def format_prompt_generation_cot_retrieval(
         chat_messages += [
             {
                 "role": "user",
-                "content": get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]),
+                "content": get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]['text']),
             },
         ]
         return chat_messages
-
+    if LanguageModelStyle == LMStyle.O1Chat:
+        chat_messages = [
+            {
+                "role": "user",
+                "content": get_cot_retrieval_question_template_answer_o1(question, retrieval_base[question.question_id]['text']),
+            },
+        ]
+        return chat_messages
     if LanguageModelStyle == LMStyle.LLaMa3:
         chat_messages = [
             {
@@ -306,7 +355,7 @@ def format_prompt_generation_cot_retrieval(
         chat_messages += [
             {
                 "role": "user",
-                "content": get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]),
+                "content": get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]['text']),
             },
         ]
         from transformers import AutoTokenizer
@@ -325,7 +374,7 @@ def format_prompt_generation_cot_retrieval(
     if LanguageModelStyle == LMStyle.Claude:
         prompt = f"{HUMAN_PROMPT}\n"
         prompt += f"{PromptConstants.SYSTEM_MESSAGE_GENERIC}\n\n"
-        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]).rstrip()}\n"
+        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]['text']).rstrip()}\n"
         prompt += f"{AI_PROMPT}"
         return prompt
 
@@ -334,19 +383,19 @@ def format_prompt_generation_cot_retrieval(
         prompt = [
             {
                 "role": "user",
-                "content": get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]).rstrip(),
+                "content": get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]['text']).rstrip(),
             }
         ]
         return system, prompt
 
     if LanguageModelStyle == LMStyle.Gemini:
         prompt = f"{PromptConstants.SYSTEM_MESSAGE_GEMINI}\n"
-        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id])}"
+        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]['text'])}"
         return prompt
 
     if LanguageModelStyle == LMStyle.StarCoderInstruct:
         prompt = f"{PromptConstants.SYSTEM_MESSAGE_GENERIC}\n"
-        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id])}"
+        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]['text'])}"
         return prompt
 
     if LanguageModelStyle == LMStyle.MistralWeb:
@@ -357,7 +406,7 @@ def format_prompt_generation_cot_retrieval(
             },
             {
                 "role": "user",
-                "content":get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]),
+                "content":get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]['text']),
             },
         ]
         return chat_messages
@@ -369,52 +418,52 @@ def format_prompt_generation_cot_retrieval(
                 "message": PromptConstants.SYSTEM_MESSAGE_GENERIC,
             },
         ]
-        message = get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id])
+        message = get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]['text'])
         return chat_messages, message
 
     if LanguageModelStyle == LMStyle.DeepSeekCodeInstruct:
         prompt = f"{PromptConstants.SYSTEM_MESSAGE_DEEPSEEK}\n\n"
-        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id])}"
+        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]['text'])}"
         return prompt
 
     if LanguageModelStyle == LMStyle.CodeQwenInstruct:
         prompt = f"{PromptConstants.SYSTEM_MESSAGE_CODEQWEN}\n\n"
-        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id])}"
+        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]['text'])}"
         return prompt
 
     if LanguageModelStyle == LMStyle.CodeLLaMaInstruct:
         prompt = f"[INST] <<SYS>>\n"
         prompt += f"{PromptConstants.SYSTEM_MESSAGE_GENERIC}\n"
         prompt += f"<</SYS>>\n\n"
-        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id])}\n"
+        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]['text'])}\n"
         prompt += f"[/INST]"
         return prompt
 
     if LanguageModelStyle == LMStyle.MagiCoder:
         prompt = f"{PromptConstants.SYSTEM_MESSAGE_MAGIC}\n"
-        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id])}"
+        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]['text'])}"
         return prompt
 
     if LanguageModelStyle == LMStyle.WizardCoder:
         prompt = f"{PromptConstants.SYSTEM_MESSAGE_WIZARD}\n\n"
-        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id])}"
+        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]['text'])}"
         return prompt
 
     if LanguageModelStyle == LMStyle.Phind:
         prompt = f"### System Prompt\n\n"
         prompt += f"{PromptConstants.SYSTEM_MESSAGE_PHIND}\n\n"
         prompt += f"### User Message\n\n"
-        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id])}"
+        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]['text'])}"
         return prompt
 
     if LanguageModelStyle == LMStyle.OC:
         prompt = f"{PromptConstants.SYSTEM_MESSAGE_GENERIC}\n\n"
-        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id])}"
+        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]['text'])}"
         return prompt
 
     if LanguageModelStyle == LMStyle.Eurusx:
         prompt = "[INST] Write Python code to solve the task:\n"
-        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id])}"
+        prompt += f"{get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]['text'])}"
         prompt += "[/INST]"
         return prompt
 
@@ -436,7 +485,7 @@ def format_prompt_generation_cot_retrieval(
 def format_prompt_generation_cot(
     question: CodeGenerationProblem, LanguageModelStyle: LMStyle
 ) -> str:
-    if LanguageModelStyle in [LMStyle.OpenAIChat, LMStyle.DeepSeekAPI]:
+    if LanguageModelStyle in [LMStyle.OpenAIChat, LMStyle.DeepSeekAPI, LMStyle.TogetherChat]:
         chat_messages = [
             {
                 "role": "system",
@@ -450,7 +499,6 @@ def format_prompt_generation_cot(
             },
         ]
         return chat_messages
-
     if LanguageModelStyle == LMStyle.LLaMa3:
         chat_messages = [
             {
@@ -591,7 +639,7 @@ def format_prompt_generation_cot(
 def format_prompt_generation(
     question: CodeGenerationProblem, LanguageModelStyle: LMStyle
 ) -> str:
-    if LanguageModelStyle in [LMStyle.OpenAIChat, LMStyle.DeepSeekAPI]:
+    if LanguageModelStyle in [LMStyle.OpenAIChat, LMStyle.DeepSeekAPI, LMStyle.TogetherChat]:
         chat_messages = [
             {
                 "role": "system",
@@ -605,7 +653,14 @@ def format_prompt_generation(
             },
         ]
         return chat_messages
-
+    if LanguageModelStyle == LMStyle.O1Chat:
+        chat_messages = [
+            {
+                "role": "user",
+                "content": get_cot_retrieval_question_template_answer(question, retrieval_base[question.question_id]['text']),
+            },
+        ]
+        return chat_messages
     if LanguageModelStyle == LMStyle.LLaMa3:
         chat_messages = [
             {

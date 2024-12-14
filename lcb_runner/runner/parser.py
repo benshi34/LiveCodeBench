@@ -152,6 +152,12 @@ def get_args():
         default="",
         help="Name of corpus"
     )
+    parser.add_argument(
+        '--selected_problems_path',
+        type=str,
+        default="",
+        help="path if only select problems want to be evaluated, list of strings of problems"
+    )
     parser.add_argument("--dtype", type=str, default="bfloat16", help="Dtype for vllm")
 
     args = parser.parse_args()

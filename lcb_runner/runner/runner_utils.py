@@ -7,7 +7,7 @@ def build_runner(args, model: LanguageModel):
 
         return TogetherAIRunner(args, model)
 
-    if model.model_style == LMStyle.OpenAIChat:
+    if model.model_style == LMStyle.OpenAIChat or model.model_style == LMStyle.O1Chat:
         from lcb_runner.runner.oai_runner import OpenAIRunner
 
         return OpenAIRunner(args, model)

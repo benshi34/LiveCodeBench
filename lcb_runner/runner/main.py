@@ -93,6 +93,7 @@ def main():
     else:
         results = []
 
+    print(results)
     combined_results = combine_results(
         args.scenario, results, model, args.cot_code_execution
     )

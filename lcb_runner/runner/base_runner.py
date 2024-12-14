@@ -87,7 +87,7 @@ class BaseRunner(ABC):
                     outputs.extend([""] * self.args.n)
         else:
             outputs = [self.run_single(argument) for argument in tqdm(arguments)]
-
+    
         if self.args.use_cache:
             for prompt, output in zip(prompts, outputs):
                 if isinstance(prompt, list):
